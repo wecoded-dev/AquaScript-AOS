@@ -1,561 +1,605 @@
 /**
- * microAOS - JS-only scroll animation framework
- * Single-file. Drop into page and call AOS.init(options).
+ * AOS-Ultra-Pro v2.0
+ * Single-file advanced scroll animation engine (WAAPI-first + fallbacks).
+ * Includes:
+ *  - presets & keyframes, WAAPI, spring physics, motion paths, ScrollTimeline integration,
+ *  - Lottie hook support, SVG draw/morph, count-up, parallax, stagger, timeline editor UI,
+ *  - profiling, dev inspector, plugin hooks, MutationObserver, batching, SSR-safe.
  *
- * Features implemented:
- * - Many entrance animations (fade, slide, zoom, flip, zoom-in-up, etc.)
- * - Attention seekers (bounce, tada, pulse, shake, pop, swing, rubber-band)
- * - Modern effects (blur-in, glow-in, clip-in, clip-in-vertical, flip-3d, rotate-3d-in)
- * - Typewriter for text, line-reveal, swash-in
- * - Stagger support for children via data-aos-stagger
- * - SVG path draw support via data-aos="draw-path"
- * - Exit animations and scroll-up reverse
- * - Parallax via data-aos-parallax-speed
- * - Options: duration, delay, easing, offset, once
- * - Uses IntersectionObserver; falls back gracefully
- * - Honors prefers-reduced-motion
+ * Drop into a script tag and use data attributes:
+ *  data-aos="presetName" | "key:myKey" | "timeline:timelineName"
+ *  data-aos-duration, data-aos-delay, data-aos-easing, data-aos-offset
+ *  data-aos-stiffness, data-aos-damping (for spring)
+ *  data-path="#motionPathId" data-path-offset="0" data-path-reverse="true"
+ *  data-lottie="true" (requires Lottie already loaded)
+ *  data-scroll-scrub="true" (connects to ScrollTimeline if supported)
+ *  data-morph="#targetPath" (basic morph)
+ *  data-dev="true" to expose the editor UI for that element (or call API)
  *
- * Usage: include script then AOS.init({ once: true, offset: 120 });
+ * Public global: window.AOSProV2 with API:
+ *  init(opts), refresh(), destroy(), registerPreset(name,preset),
+ *  registerKeyframes(name,frames), timeline(name,opts), animate(el,opts),
+ *  enableEditor(), profile(), use(plugin)
+ *
+ * Author: your needy web dev overlord
  */
 
 (function (global) {
   'use strict';
-
-  const defaultOptions = {
-    offset: 120, // px before element enters viewport
-    duration: 600, // default duration ms
-    delay: 0,
-    easing: 'cubic-bezier(.22,.9,.26,1)', // nice ease-out-ish
-    once: false, // animate only once
-    mirror: true, // animate out when scrolling back up
-    staggerDelay: 80, // default stagger between children (ms)
-    root: null,
-    rootMargin: '0px',
-    threshold: 0.15,
-    reduceMotion: true, // respect prefers-reduced-motion
-  };
-
-  // Small helpful set of animation types and their initial/final style generators.
-  const ANIMATIONS = {
-    // Fade family
-    'fade': ({dir}) => ({ from: { opacity: 0, transform: 'none' }, to: { opacity: 1 } }),
-    'fade-up': ({offsetY=20}) => ({ from: { opacity: 0, transform: `translateY(${offsetY}px)` }, to: { opacity: 1, transform: 'translateY(0)' } }),
-    'fade-down': ({offsetY=20}) => ({ from: { opacity: 0, transform: `translateY(-${offsetY}px)` }, to: { opacity: 1, transform: 'translateY(0)' } }),
-    'fade-left': ({offsetX=20}) => ({ from: { opacity: 0, transform: `translateX(${offsetX}px)` }, to: { opacity: 1, transform: 'translateX(0)' } }),
-    'fade-right': ({offsetX=20}) => ({ from: { opacity: 0, transform: `translateX(-${offsetX}px)` }, to: { opacity: 1, transform: 'translateX(0)' } }),
-
-    // Slide family (more pronounced)
-    'slide-up': ({offsetY=30}) => ({ from: { opacity: 0, transform: `translateY(${offsetY}px)` }, to: { opacity: 1, transform: 'translateY(0)' } }),
-    'slide-down': ({offsetY=30}) => ({ from: { opacity: 0, transform: `translateY(-${offsetY}px)` }, to: { opacity: 1, transform: 'translateY(0)' } }),
-    'slide-left': ({offsetX=40}) => ({ from: { opacity: 0, transform: `translateX(${offsetX}px)` }, to: { opacity: 1, transform: 'translateX(0)' } }),
-    'slide-right': ({offsetX=40}) => ({ from: { opacity: 0, transform: `translateX(-${offsetX}px)` }, to: { opacity: 1, transform: 'translateX(0)' } }),
-
-    // Zoom
-    'zoom-in': ({s=0.85}) => ({ from: { opacity: 0, transform: `scale(${s})` }, to: { opacity: 1, transform: 'scale(1)' } }),
-    'zoom-in-up': ({s=0.9, offsetY=20}) => ({ from: { opacity: 0, transform: `scale(${s}) translateY(${offsetY}px)` }, to: { opacity: 1, transform: 'scale(1) translateY(0)' } }),
-    'zoom-in-down': ({s=0.9, offsetY=20}) => ({ from: { opacity: 0, transform: `scale(${s}) translateY(-${offsetY}px)` }, to: { opacity: 1, transform: 'scale(1) translateY(0)' } }),
-    'zoom-in-left': ({s=0.9, offsetX=20}) => ({ from: { opacity: 0, transform: `scale(${s}) translateX(${offsetX}px)` }, to: { opacity: 1, transform: 'scale(1) translateX(0)' } }),
-    'zoom-in-right': ({s=0.9, offsetX=20}) => ({ from: { opacity: 0, transform: `scale(${s}) translateX(-${offsetX}px)` }, to: { opacity: 1, transform: 'scale(1) translateX(0)' } }),
-    'zoom-out': ({s=1.05}) => ({ from: { opacity: 0, transform: `scale(${s})` }, to: { opacity: 1, transform: 'scale(1)' } }),
-
-    // Attention seekers
-    'flip': ({}) => ({ from: { opacity: 0, transform: 'rotateY(90deg)' }, to: { opacity: 1, transform: 'rotateY(0)' } }),
-    'flip-up': ({}) => ({ from: { opacity: 0, transform: 'rotateX(75deg)' }, to: { opacity: 1, transform: 'rotateX(0)' } }),
-    'flip-down': ({}) => ({ from: { opacity: 0, transform: 'rotateX(-75deg)' }, to: { opacity: 1, transform: 'rotateX(0)' } }),
-    'flip-left': ({}) => ({ from: { opacity: 0, transform: 'rotateY(75deg)' }, to: { opacity: 1, transform: 'rotateY(0)' } }),
-    'flip-right': ({}) => ({ from: { opacity: 0, transform: 'rotateY(-75deg)' }, to: { opacity: 1, transform: 'rotateY(0)' } }),
-
-    // Pop & bounce-ish (we'll simulate through scale + translate)
-    'bounce': ({}) => ({ from: { opacity: 0, transform: 'scale(.95)' }, to: { opacity: 1, transform: 'scale(1)' } }),
-    'bounce-in': ({}) => ({ from: { opacity: 0, transform: 'scale(.7)' }, to: { opacity: 1, transform: 'scale(1)' } }),
-    'tada': ({}) => ({ from: { opacity: 0, transform: 'scale(.9) rotate(-4deg)' }, to: { opacity: 1, transform: 'scale(1) rotate(0)' } }),
-    'pulse': ({}) => ({ from: { opacity: 1, transform: 'scale(1)' }, to: { opacity: 1, transform: 'scale(1.02)' } }),
-    'rubber-band': ({}) => ({ from: { opacity: 0, transform: 'scale(.8)' }, to: { opacity: 1, transform: 'scale(1)' } }),
-    'shake': ({}) => ({ from: { opacity: 1, transform: 'translateX(0)' }, to: { opacity: 1, transform: 'translateX(0)' } }), // we'll animate using keyframes below
-    'pop': ({}) => ({ from: { opacity: 0, transform: 'scale(.6)' }, to: { opacity: 1, transform: 'scale(1)' } }),
-    'swing': ({}) => ({ from: { opacity: 0, transform: 'rotate(-8deg)' }, to: { opacity: 1, transform: 'rotate(0)' } }),
-
-    // Modern & advanced
-    'blur-in': ({}) => ({ from: { opacity: 0, filter: 'blur(8px)' }, to: { opacity: 1, filter: 'blur(0)' } }),
-    'blur-out': ({}) => ({ from: { opacity: 1, filter: 'blur(0)' }, to: { opacity: 0, filter: 'blur(6px)' } }),
-    'glow-in': ({}) => ({ from: { opacity: 0, boxShadow: '0 0 0 rgba(0,0,0,0)' }, to: { opacity: 1, boxShadow: '0 8px 30px rgba(0,0,0,.12)' } }),
-    'clip-in': ({}) => ({ from: { opacity: 0, clipPath: 'polygon(0 0, 100% 0, 100% 0, 0 0)' }, to: { opacity: 1, clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' } }),
-    'clip-in-vertical': ({}) => ({ from: { opacity: 0, clipPath: 'inset(50% 0 50% 0)' }, to: { opacity: 1, clipPath: 'inset(0% 0% 0% 0%)' } }),
-    'clip-in-horizontal': ({}) => ({ from: { opacity: 0, clipPath: 'inset(0 50% 0 50%)' }, to: { opacity: 1, clipPath: 'inset(0% 0% 0% 0%)' } }),
-    'flip-3d': ({}) => ({ from: { opacity: 0, transform: 'perspective(800px) rotateY(90deg)' }, to: { opacity: 1, transform: 'perspective(800px) rotateY(0deg)' } }),
-    'flip-3d-vertical': ({}) => ({ from: { opacity: 0, transform: 'perspective(900px) rotateX(90deg)' }, to: { opacity: 1, transform: 'perspective(900px) rotateX(0deg)' } }),
-    'flip-3d-horizontal': ({}) => ({ from: { opacity: 0, transform: 'perspective(900px) rotateY(90deg)' }, to: { opacity: 1, transform: 'perspective(900px) rotateY(0deg)' } }),
-    'rotate-3d-in': ({}) => ({ from: { opacity: 0, transform: 'perspective(900px) rotate3d(1,1,0,45deg)' }, to: { opacity: 1, transform: 'perspective(900px) rotate3d(0,0,0,0deg)' } }),
-
-    // Text animations are handled specially
-    'typewriter': null,
-    'line-reveal': null,
-    'swash-in': null,
-
-    // Exit placeholders (we reverse where appropriate)
-    'fade-out': ({offsetY=10}) => ({ from: { opacity: 1 }, to: { opacity: 0, transform: `translateY(-${offsetY}px)` } }),
-    'fade-out-up': ({offsetY=20}) => ({ from: { opacity: 1 }, to: { opacity: 0, transform: `translateY(-${offsetY}px)` } }),
-    'fade-out-down': ({offsetY=20}) => ({ from: { opacity: 1 }, to: { opacity: 0, transform: `translateY(${offsetY}px)` } }),
-    'slide-out-up': ({offsetY=30}) => ({ from: { opacity: 1 }, to: { opacity: 0, transform: `translateY(-${offsetY}px)` } }),
-    'slide-out-down': ({offsetY=30}) => ({ from: { opacity: 1 }, to: { opacity: 0, transform: `translateY(${offsetY}px)` } }),
-    'zoom-out': ({s=1.05}) => ({ from: { opacity: 1 }, to: { opacity: 0, transform: `scale(${s})` } }),
-    'flip-out': ({}) => ({ from: { opacity: 1 }, to: { opacity: 0, transform: 'rotateY(90deg)' } }),
-
-    // Draw path for SVGs handled specially
-    'draw-path': null,
-    // More can be added...
-  };
-
-  function extend(a, b) {
-    const out = {};
-    for (let k in a) out[k] = a[k];
-    for (let k in b) out[k] = b[k];
-    return out;
-  }
-
-  // Helpers
-  function px(n) { return (typeof n === 'number') ? `${n}px` : n; }
-  function isReducedMotionAllowed() {
-    if (!window.matchMedia) return true;
-    try {
-      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    } catch (e) { return false; }
-  }
-
-  function applyStyles(el, styles) {
-    for (let k in styles) {
-      try { el.style[k] = styles[k]; } catch (e) { /* skip invalid */ }
-    }
-  }
-
-  function setTransition(el, duration, easing, delay, properties = 'opacity,transform') {
-    // Use hardware-accelerated properties only typically: transform, opacity, filter
-    el.style.transition = `${properties} ${duration}ms ${easing} ${delay}ms`;
-    el.style.willChange = properties;
-  }
-
-  function clearTransition(el) {
-    el.style.transition = '';
-    // keep will-change maybe
-  }
-
-  // For keyframe-like attention seekers we create CSS @keyframes dynamically once
-  let _styleInjected = false;
-  function injectGlobalStyles() {
-    if (_styleInjected) return;
-    _styleInjected = true;
-    const css = `
-      .aos-initial-hidden { opacity: 0; }
-      .aos-visible { opacity: 1; }
-      @keyframes aos-shake { 0% { transform: translateX(0) } 10% { transform: translateX(-6px) } 30% { transform: translateX(6px) } 50% { transform: translateX(-4px) } 70% { transform: translateX(4px) } 100% { transform: translateX(0) } }
-      @keyframes aos-pulse { 0% { transform: scale(1)} 50% { transform: scale(1.03)} 100% { transform: scale(1)} }
-      @keyframes aos-rubber { 0% { transform: scale(1)} 30% { transform: scale(1.25,0.85)} 50% { transform: scale(.9)} 65% { transform: scale(1.05)} 100% { transform: scale(1)} }
-    `;
-    const s = document.createElement('style');
-    s.setAttribute('data-micro-aos', 'true');
-    s.appendChild(document.createTextNode(css));
-    document.head.appendChild(s);
-  }
-
-  // Typewriter helper: splits text nodes into spans and reveals with interval.
-  function runTypewriter(el, duration, easing, delay) {
-    // only run once per element
-    if (el.__aosTypewriterDone) return;
-    el.__aosTypewriterDone = true;
-
-    const text = el.textContent.trim();
-    el.textContent = '';
-    const totalDuration = Math.max(200, duration || 800);
-    const perChar = Math.max(10, Math.round(totalDuration / Math.max(1, text.length)));
-
-    const fragment = document.createDocumentFragment();
-    Array.from(text).forEach((ch) => {
-      const span = document.createElement('span');
-      span.textContent = ch;
-      span.style.opacity = 0;
-      span.style.transition = `opacity ${perChar}ms linear`;
-      fragment.appendChild(span);
-    });
-    el.appendChild(fragment);
-
-    const spans = el.querySelectorAll('span');
-    let i = 0;
-    function revealNext() {
-      if (i >= spans.length) return;
-      spans[i].style.opacity = 1;
-      i++;
-      setTimeout(revealNext, perChar);
-    }
-    setTimeout(revealNext, delay || 0);
-  }
-
-  // SVG draw path
-  function prepareSVGPath(el) {
-    if (!(el instanceof SVGElement)) return;
-    const paths = el.querySelectorAll('path, circle, rect, line, polyline, polygon');
-    paths.forEach(p => {
-      try {
-        const len = p.getTotalLength ? p.getTotalLength() : (p.getBBox ? Math.max(p.getBBox().width, p.getBBox().height) : 100);
-        p.style.strokeDasharray = len;
-        p.style.strokeDashoffset = len;
-        p.style.transition = `stroke-dashoffset var(--aos-duration, 600ms) var(--aos-easing, ease) var(--aos-delay, 0ms)`;
-        p.style.strokeLinecap = p.style.strokeLinecap || 'round';
-      } catch (e) {}
-    });
-  }
-  function runSVGDraw(el) {
-    const paths = el.querySelectorAll('path, circle, rect, line, polyline, polygon');
-    paths.forEach(p => {
-      try {
-        p.style.strokeDashoffset = 0;
-      } catch (e) {}
-    });
-  }
-  function resetSVGDraw(el) {
-    const paths = el.querySelectorAll('path, circle, rect, line, polyline, polygon');
-    paths.forEach(p => {
-      try {
-        const len = p.getTotalLength ? p.getTotalLength() : (p.getBBox ? Math.max(p.getBBox().width, p.getBBox().height) : 100);
-        p.style.strokeDashoffset = len;
-      } catch (e) {}
-    });
-  }
-
-  // Higher level worker for a single element
-  function processElement(el, opts, observer) {
-    // read attributes
-    const anim = (el.getAttribute('data-aos') || '').trim();
-    const duration = parseInt(el.getAttribute('data-aos-duration') || opts.duration, 10);
-    const delay = parseInt(el.getAttribute('data-aos-delay') || opts.delay, 10);
-    const easing = el.getAttribute('data-aos-easing') || opts.easing;
-    const offset = parseInt(el.getAttribute('data-aos-offset') || opts.offset, 10);
-    const onceAttr = el.getAttribute('data-aos-once');
-    const once = onceAttr === 'true' ? true : (onceAttr === 'false' ? false : opts.once);
-    const stagger = el.getAttribute('data-aos-stagger') === 'true';
-    const staggerSelector = el.getAttribute('data-aos-stagger-selector') || null;
-    const staggerDelay = parseInt(el.getAttribute('data-aos-stagger-delay') || opts.staggerDelay, 10);
-    const exitAnim = el.getAttribute('data-aos-exit') || null;
-    const parallax = parseFloat(el.getAttribute('data-aos-parallax-speed') || 0);
-    const anchorSelector = el.getAttribute('data-aos-anchor') || null;
-
-    // flag
-    el.__aos = el.__aos || {};
-    el.__aos.meta = { anim, duration, delay, easing, offset, once, stagger, staggerSelector, staggerDelay, exitAnim, parallax, anchorSelector };
-
-    // prepare initial style depending on animation type
-    function setInitialState() {
-      // skip if reduced motion
-      if (opts.reduceMotion && isReducedMotionAllowed()) {
-        // make element visible with no heavy transforms
-        el.style.opacity = 1;
-        el.style.transform = 'none';
-        return;
-      }
-
-      if (!anim) return;
-      // special types
-      if (anim === 'typewriter') {
-        // hide text, keep block visible
-        el.style.opacity = 1;
-        el.style.whiteSpace = 'pre';
-        el.style.overflow = 'hidden';
-        el.style.display = el.style.display || 'inline-block';
-      } else if (anim === 'draw-path') {
-        // Prepare SVG children
-        prepareSVGPath(el);
-      }
-      // generic: place initial transform/opacity per ANIMATIONS map
-      const fn = ANIMATIONS[anim];
-      if (fn) {
-        const states = fn({});
-        const init = states.from || {};
-        applyStyles(el, {
-          opacity: (init.opacity != null) ? init.opacity : (el.style.opacity || 0),
-          transform: init.transform || (el.style.transform || 'none'),
-        });
-        // apply any other properties (filter, clipPath, boxShadow)
-        ['filter','clipPath','boxShadow'].forEach(k => { if (init[k]) el.style[k] = init[k]; });
-      } else {
-        // If unknown or special, default to invisible
-        el.style.opacity = el.style.opacity || 0;
-      }
-
-      // set transition variables via css variables used by svg draw
-      el.style.setProperty('--aos-duration', `${duration}ms`);
-      el.style.setProperty('--aos-easing', easing);
-      el.style.setProperty('--aos-delay', `${delay}ms`);
-
-      // global transition
-      // For certain keyframe heavy animations (shake, pulse, rubber-band) we'll use animation instead of transition
-      if (['shake','pulse','rubber-band'].includes(anim)) {
-        // use CSS animation names we injected
-        if (anim === 'shake') el.style.animation = `aos-shake ${Math.max(600,duration)}ms ${easing} ${delay}ms both`;
-        if (anim === 'pulse') el.style.animation = `aos-pulse ${Math.max(800,duration)}ms ${easing} ${delay}ms both`;
-        if (anim === 'rubber-band') el.style.animation = `aos-rubber ${Math.max(800,duration)}ms ${easing} ${delay}ms both`;
-      } else {
-        setTransition(el, duration, easing, delay, 'opacity,transform,filter,clip-path,box-shadow');
-      }
-
-      // ensure transform-origin for 3D flips
-      if ((anim && anim.includes('flip')) || anim && anim.includes('rotate-3d')) {
-        el.style.transformStyle = 'preserve-3d';
-        el.style.backfaceVisibility = 'hidden';
-      }
-
-      el.classList.add('aos-initial-hidden');
-    }
-
-    function applyEntrance(doStagger=false, anchor=null) {
-      if (opts.reduceMotion && isReducedMotionAllowed()) {
-        el.style.opacity = 1;
-        el.style.transform = 'none';
-        clearTransition(el);
-        return;
-      }
-
-      // if typewriter
-      if (anim === 'typewriter') {
-        // show container and run typewriter
-        el.style.opacity = 1;
-        runTypewriter(el, duration, easing, delay);
-        return;
-      }
-      if (anim === 'draw-path') {
-        // reveal svg draw
-        runSVGDraw(el);
-        el.style.opacity = 1;
-        return;
-      }
-
-      const fn = ANIMATIONS[anim];
-      let finalStyles = {};
-      if (fn) {
-        const states = fn({});
-        finalStyles = states.to || {};
-      } else {
-        // default final
-        finalStyles = { opacity: 1, transform: 'none' };
-      }
-
-      // if stagger and children
-      if (el.__aos.meta && el.__aos.meta.stagger) {
-        const selector = el.__aos.meta.staggerSelector || '[data-aos-child]';
-        const children = selector === '[data-aos-child]' ? Array.from(el.children).filter(c=>c.hasAttribute('data-aos-child')) : Array.from(el.querySelectorAll(selector));
-        children.forEach((child, idx) => {
-          const d = (el.__aos.meta.staggerDelay || opts.staggerDelay) * idx;
-          child.style.transitionDelay = `${d + (el.__aos.meta.delay || 0)}ms`;
-          // apply final styles to child (keeping opacity/transform changes)
-          child.style.opacity = finalStyles.opacity != null ? finalStyles.opacity : 1;
-          if (finalStyles.transform) child.style.transform = finalStyles.transform;
-          if (finalStyles.filter) child.style.filter = finalStyles.filter;
-          if (finalStyles.clipPath) child.style.clipPath = finalStyles.clipPath;
-        });
-        // reveal parent quickly
-        el.style.opacity = 1;
-      } else {
-        // normal element
-        // remove initial hidden class
-        el.classList.remove('aos-initial-hidden');
-        // apply final styles (use empty-string fallback for properties intentionally unset)
-        if (finalStyles.opacity != null) el.style.opacity = finalStyles.opacity;
-        if (finalStyles.transform != null) el.style.transform = finalStyles.transform;
-        if (finalStyles.filter != null) el.style.filter = finalStyles.filter;
-        if (finalStyles.clipPath != null) el.style.clipPath = finalStyles.clipPath;
-        if (finalStyles.boxShadow != null) el.style.boxShadow = finalStyles.boxShadow;
-      }
-    }
-
-    function applyExit() {
-      // handle exit animations (reverse or explicit)
-      if (opts.reduceMotion && isReducedMotionAllowed()) {
-        return;
-      }
-      const exit = exitAnim || inferExit(anim);
-      if (!exit) return;
-      const fn = ANIMATIONS[exit];
-      if (exit === 'draw-path') {
-        resetSVGDraw(el); return;
-      }
-      if (fn) {
-        const states = fn({});
-        const final = states.to || {};
-        // apply final exit
-        if (final.opacity != null) el.style.opacity = final.opacity;
-        if (final.transform != null) el.style.transform = final.transform;
-        if (final.filter != null) el.style.filter = final.filter;
-      } else {
-        // fallback: fade out
-        el.style.opacity = 0;
-        el.style.transform = 'translateY(-10px)';
-      }
-    }
-
-    function inferExit(enterAnim) {
-      if (!enterAnim) return 'fade-out';
-      if (enterAnim.startsWith('fade')) return 'fade-out';
-      if (enterAnim.startsWith('slide')) return 'slide-out-up';
-      if (enterAnim.startsWith('zoom')) return 'zoom-out';
-      if (enterAnim.includes('flip')) return 'flip-out';
-      return 'fade-out';
-    }
-
-    setInitialState();
-
-    return {
-      setInitialState,
-      applyEntrance,
-      applyExit,
-      meta: el.__aos.meta,
+  if (typeof window === 'undefined') {
+    // Server / SSR safe no-op
+    global.AOSProV2 = {
+      init: () => {},
+      refresh: () => {},
+      destroy: () => {},
+      registerPreset: () => {},
+      registerKeyframes: () => {},
+      timeline: () => ({ run: () => {} }),
+      animate: () => {},
+      enableEditor: () => {},
+      profile: () => ({})
     };
+    return;
   }
 
-  // Create global observer and optional scroll listener for parallax
-  const AOS = {
-    _opts: {},
-    _observer: null,
-    _instances: new Map(),
-    init(opts = {}) {
-      injectGlobalStyles();
-      this._opts = extend(defaultOptions, opts || {});
-      const reduced = isReducedMotionAllowed();
-      if (this._opts.reduceMotion && reduced) {
-        // Make everything visible immediately if user prefers reduced motion
-        Array.from(document.querySelectorAll('[data-aos]')).forEach(el => {
-          el.style.opacity = 1;
-          el.style.transform = 'none';
+  /* ===========================
+     Config & Utility Helpers
+     =========================== */
+  const DEFAULTS = {
+    offset: 140,
+    duration: 800,
+    delay: 0,
+    easing: 'cubic-bezier(.2,.9,.2,1)',
+    once: true,
+    mirror: false,
+    anchorPlacement: 'top-bottom',
+    disableOnMobile: false,
+    debug: false,
+    injectedStyles: true,
+    batchInterval: 100,
+    maxFPSDropWarn: 10, // warn if engine causes fps drop > this
+    presets: {}, // fill later
+    keyframes: {},
+    editorEnabled: false,
+  };
+
+  const PRESET_BANK = {
+    /* subtle */
+    'fade-up': { transform: 'translateY(24px)', opacity: 0 },
+    'fade-down': { transform: 'translateY(-24px)', opacity: 0 },
+    'fade-left': { transform: 'translateX(-24px)', opacity: 0 },
+    'fade-right': { transform: 'translateX(24px)', opacity: 0 },
+    'zoom-in': { transform: 'scale(.95)', opacity: 0 },
+    'soft-pop': { transform: 'scale(.96) translateY(6px)', opacity: 0, filter: 'blur(3px)' },
+
+    /* dramatic */
+    'flip-left': { transform: 'rotateY(22deg) translateZ(0)', opacity: 0 },
+    'flip-right': { transform: 'rotateY(-22deg) translateZ(0)', opacity: 0 },
+    'sweep-up': { transform: 'translateY(50px) rotate(-4deg)', opacity: 0 },
+
+    /* physics */
+    'spring-pop': { keyframePreset: 'spring-pop', useWAAPI: true },
+    'elastic': { keyframePreset: 'elastic-entrance', useWAAPI: true },
+
+    /* special */
+    'draw-line': { drawPath: true }, // triggers SVG draw if element is svg
+  };
+
+  const DEFAULT_KEYFRAMES = {
+    'spring-pop': [
+      { transform: 'scale(.92)', opacity: 0 },
+      { transform: 'scale(1.06)', offset: 0.6 },
+      { transform: 'scale(1)', opacity: 1 }
+    ],
+    'elastic-entrance': [
+      { transform: 'translateY(36px)', opacity: 0 },
+      { transform: 'translateY(-14px)', offset: 0.6 },
+      { transform: 'translateY(0)', opacity: 1 }
+    ]
+  };
+
+  const isReducedMotion = () => {
+    try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch (e) { return false; }
+  };
+  const isMobileUA = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
+  const raf = (fn) => window.requestAnimationFrame ? window.requestAnimationFrame(fn) : setTimeout(fn, 16);
+  const now = () => (performance && performance.now) ? performance.now() : Date.now();
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const parseBool = (v) => { if (v === undefined || v === null) return undefined; if (typeof v === 'boolean') return v; const s = String(v).toLowerCase(); return s === 'true' ? true : (s === 'false' ? false : undefined); };
+
+  /* ===========================
+     Engine Class
+     =========================== */
+  class AOSProV2Engine {
+    constructor(opts = {}) {
+      this.opts = Object.assign({}, DEFAULTS, opts);
+      this.opts.presets = Object.assign({}, PRESET_BANK, (opts.presets || {}));
+      this.opts.keyframes = Object.assign({}, DEFAULT_KEYFRAMES, (opts.keyframes || {}));
+      this.observer = null;
+      this.mutationObserver = null;
+      this.elements = new Map(); // el -> meta
+      this.queue = [];
+      this.batchTimer = null;
+      this.animations = new Set(); // WAAPI entries or internal runners
+      this.timelines = new Map();
+      this.editorOpen = false;
+      this.profiler = { frames: [], lastTick: now(), warned: false };
+      this._handleIntersect = this._handleIntersect.bind(this);
+      this._mutationHandler = this._mutationHandler.bind(this);
+      this._onScroll = this._onScroll.bind(this);
+      if (this.opts.injectedStyles) this._injectStyles();
+      this._bindScroll();
+    }
+
+    log(...args) { if (this.opts.debug) console.info('[AOSProV2]', ...args); }
+
+    _injectStyles() {
+      if (document.getElementById('aos-pro-v2-styles')) return;
+      const s = document.createElement('style'); s.id = 'aos-pro-v2-styles';
+      s.textContent = `
+/* AOS-Pro-V2 core */
+.aosv2-init { will-change: transform, opacity, filter; transition-property: transform, opacity, filter; opacity:1; }
+.aosv2-hidden { opacity:0; }
+.aosv2-anim { pointer-events:auto; }
+.aosv2-devui { position: fixed; right: 10px; top: 10px; z-index: 99999; background: rgba(6,10,18,0.8); color:#e9f3ff; padding:10px; border-radius:10px; font-family: Inter, system-ui; font-size:12px; box-shadow:0 8px 30px rgba(2,6,23,0.6);}
+.aosv2-badge { padding:4px 8px; border-radius:6px; display:inline-block; margin:2px; background: rgba(255,255,255,0.03); }
+`;
+      document.head.appendChild(s);
+    }
+
+    _bindScroll() {
+      window.addEventListener('scroll', this._onScroll, { passive: true });
+      window.addEventListener('resize', () => { this.elements.forEach((m) => { if (m.motionPath) this._updatePathProgress(m); }); });
+    }
+
+    _onScroll() {
+      // profiler sample
+      const t = now();
+      const delta = t - this.profiler.lastTick;
+      this.profiler.frames.push(delta);
+      if (this.profiler.frames.length > 60) this.profiler.frames.shift();
+      this.profiler.lastTick = t;
+      const avg = this.profiler.frames.reduce((a,b)=>a+b,0)/this.profiler.frames.length;
+      const fps = 1000/avg;
+      if (1000/avg < (60 - this.opts.maxFPSDropWarn) && !this.profiler.warned) {
+        console.warn('[AOSProV2] Significant FPS drop detected. Use reduced effects or disable dev modes.');
+        this.profiler.warned = true;
+      }
+      // progress motion paths & lottie scrub
+      this.elements.forEach((meta, el) => {
+        if (meta.motionPath) this._applyPathProgress(el, meta);
+        if (meta.scrollScrub && meta.lottie && window.lottie) this._applyLottieScrub(el, meta);
+      });
+    }
+
+    _getNodes(selector='[data-aos]') { return Array.from(document.querySelectorAll(selector)); }
+
+    _buildMeta(el) {
+      const rawName = el.getAttribute('data-aos') || 'fade-up';
+      const name = String(rawName).trim();
+      const preset = this.opts.presets[name] || {};
+      const keyframeRef = preset.keyframePreset || el.getAttribute('data-aos-keyframe') || null;
+      const useWAAPI = preset.useWAAPI || (el.getAttribute('data-aos-waapi') === 'true') || false;
+      const meta = {
+        el,
+        name,
+        preset,
+        duration: parseInt(el.getAttribute('data-aos-duration')) || preset.duration || this.opts.duration,
+        delay: parseInt(el.getAttribute('data-aos-delay')) || this.opts.delay,
+        easing: el.getAttribute('data-aos-easing') || preset.easing || this.opts.easing,
+        offset: parseInt(el.getAttribute('data-aos-offset')) || preset.offset || this.opts.offset,
+        once: parseBool(el.getAttribute('data-aos-once')) ?? (preset.once ?? this.opts.once),
+        mirror: parseBool(el.getAttribute('data-aos-mirror')) ?? (preset.mirror ?? this.opts.mirror),
+        anchor: this._resolveAnchor(el),
+        anchorPlacement: el.getAttribute('data-aos-anchor-placement') || this.opts.anchorPlacement,
+        customClass: el.getAttribute('data-aos-class') || 'aosv2-animated',
+        stagger: parseInt(el.getAttribute('data-aos-stagger')) || preset.stagger || 0,
+        useWAAPI,
+        keyframes: this.opts.keyframes[keyframeRef] || null,
+        motionPath: this._parsePath(el.getAttribute('data-path')),
+        pathOffset: parseFloat(el.getAttribute('data-path-offset')||0),
+        pathReverse: parseBool(el.getAttribute('data-path-reverse')) || false,
+        scrollScrub: parseBool(el.getAttribute('data-scroll-scrub')) || false,
+        lottie: parseBool(el.getAttribute('data-lottie')) || false,
+        spring: { stiffness: parseFloat(el.getAttribute('data-aos-stiffness')) || 180, damping: parseFloat(el.getAttribute('data-aos-damping')) || 18 },
+        drawPath: el.getAttribute('data-draw-path') === 'true',
+        morphTarget: el.getAttribute('data-morph') || null,
+        count: el.getAttribute('data-count') || null,
+        dev: parseBool(el.getAttribute('data-dev')) || false
+      };
+      return meta;
+    }
+
+    _resolveAnchor(el) {
+      const sel = el.getAttribute('data-aos-anchor');
+      if (!sel) return el;
+      try {
+        return document.querySelector(sel) || el;
+      } catch (e) { return el; }
+    }
+
+    _parsePath(val) {
+      if (!val) return null;
+      try {
+        const el = document.querySelector(val);
+        if (!el) return null;
+        if (el.tagName.toLowerCase() !== 'path' && el.querySelector) {
+          // if selector is svg container, try find a path
+          const p = el.querySelector('path');
+          return p || null;
+        }
+        return el;
+      } catch (e) { return null; }
+    }
+
+    _prepareElement(el, meta) {
+      // set base classes and transitions
+      el.classList.add('aosv2-init');
+      el.style.transitionProperty = 'transform, opacity, filter';
+      el.style.transitionDuration = `${meta.duration}ms`;
+      el.style.transitionTimingFunction = meta.easing;
+      el.style.transitionDelay = `${meta.delay}ms`;
+      if (!isReducedMotion()) {
+        if (meta.preset && meta.preset.transform) el.style.transform = meta.preset.transform;
+        if (meta.preset && meta.preset.opacity !== undefined) el.style.opacity = meta.preset.opacity;
+        if (meta.preset && meta.preset.filter) el.style.filter = meta.preset.filter;
+      } else {
+        el.style.transitionDuration = '0ms';
+        el.style.transitionDelay = '0ms';
+        el.style.opacity = 1;
+        el.style.transform = 'none';
+      }
+      el.classList.add('aosv2-hidden');
+
+      // SVG draw setup
+      if (meta.drawPath && el.tagName.toLowerCase() === 'svg') {
+        const paths = el.querySelectorAll('path, line, polyline, polygon, circle, rect');
+        paths.forEach(p => {
+          try {
+            const len = p.getTotalLength ? p.getTotalLength() : 0;
+            p.style.strokeDasharray = len;
+            p.style.strokeDashoffset = len;
+            p.style.transition = `stroke-dashoffset ${meta.duration}ms ${meta.easing} ${meta.delay}ms`;
+          } catch (e) {}
         });
-        // still return object for API
       }
 
-      // Build IntersectionObserver with rootMargin tuned by offset
-      const root = this._opts.root;
-      const rootMargin = this._opts.rootMargin;
-      const threshold = this._opts.threshold;
+      // count-up prep
+      if (meta.count) {
+        const [start, end] = String(meta.count).split(':').map(s => parseFloat(s));
+        el.__aosv2_count = { start: start||0, end: end||0, duration: meta.duration, started: false };
+        // optionally set initial text
+      }
 
-      // Disconnect any previous observer
-      if (this._observer) this._observer.disconnect();
+      // path motion precompute
+      if (meta.motionPath) {
+        this._initPathMeta(meta);
+      }
 
-      // Create observer callback
-      const observerCb = (entries) => {
-        entries.forEach(entry => {
-          const el = entry.target;
-          const inst = this._instances.get(el);
-          if (!inst) return;
+      // Lottie: if requested, try to bind existing player by data attribute (user should init Lottie themselves)
+      if (meta.lottie && window.lottie) {
+        // expecting the element to be a container with data-lottie-player already loaded
+        meta.lottiePlayer = el.lottiePlayer || null;
+      }
+    }
 
-          const meta = inst.meta;
-          const isVisible = entry.isIntersecting && entry.intersectionRatio > 0;
-          // Trigger point: allow offset: we use boundingClientRect in viewport so anchor or threshold handles it
-          if (isVisible) {
-            // apply entrance (with stagger handled internally)
-            inst.applyEntrance();
-            // if once: unobserve
-            if (meta.once) {
-              this._observer.unobserve(el);
+    _initPathMeta(meta) {
+      try {
+        const path = meta.motionPath;
+        const len = path.getTotalLength();
+        meta.pathLength = len;
+      } catch (e) {
+        meta.motionPath = null;
+      }
+    }
+
+    _applyPathProgress(el, meta) {
+      // determine anchor rect relative progress
+      try {
+        const anchorRect = meta.anchor.getBoundingClientRect();
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        const triggerStart = Math.max(0, anchorRect.top - vh + meta.offset);
+        const progress = clamp(1 - ((anchorRect.top + (anchorRect.height/2)) / vh), 0, 1);
+        const pct = meta.pathReverse ? 1 - progress : progress;
+        const p = Math.max(0, Math.min(1, pct + meta.pathOffset));
+        // compute point on path
+        const pt = meta.motionPath.getPointAtLength(p * meta.pathLength);
+        // position element (center)
+        el.style.position = 'relative';
+        el.style.left = (pt.x) + 'px';
+        el.style.top = (pt.y) + 'px';
+      } catch (e) { /* ignore */ }
+    }
+
+    _applyLottieScrub(el, meta) {
+      if (!meta.lottiePlayer) return;
+      try {
+        const rect = meta.anchor.getBoundingClientRect();
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        const progress = clamp(1 - (rect.top / vh), 0, 1);
+        const frame = progress * (meta.lottiePlayer.totalFrames || meta.lottiePlayer.getDuration(true));
+        meta.lottiePlayer.goToAndStop(frame, true);
+      } catch (e) {}
+    }
+
+    _runCountUp(el, countMeta) {
+      const start = countMeta.start, end = countMeta.end, duration = Math.max(40, countMeta.duration);
+      const t0 = now();
+      countMeta.started = true;
+      const tick = () => {
+        const p = clamp((now() - t0) / duration, 0, 1);
+        const val = Math.round(start + (end - start) * p);
+        el.textContent = val;
+        if (p < 1) raf(tick);
+      };
+      raf(tick);
+    }
+
+    _triggerReveal(el, meta) {
+      if (meta.once && meta.revealed) return;
+
+      // stagger children if requested
+      if (meta.stagger && meta.stagger > 0) {
+        const items = el.querySelectorAll('[data-aos-item]');
+        items.forEach((it, idx) => {
+          setTimeout(() => this._triggerReveal(it, this.elements.get(it)), meta.delay + idx * meta.stagger);
+        });
+      }
+
+      // WAAPI path
+      if (meta.useWAAPI && (el.animate || Element.prototype.animate)) {
+        const kf = meta.keyframes || this.opts.keyframes[meta.name];
+        if (kf) {
+          const anim = el.animate(kf, { duration: meta.duration, delay: meta.delay, easing: meta.easing, fill: 'forwards' });
+          this._trackAnim(anim, el, meta);
+          meta.revealed = true;
+          this.elements.set(el, meta);
+          if (meta.once && this.observer) this.observer.unobserve(meta.anchor);
+          return;
+        }
+      }
+
+      // physics spring fallback: small spring solver to animate transform scale/translate over time
+      if (meta.preset && meta.preset.useSpring) {
+        this._springReveal(el, meta);
+      } else {
+        // CSS transition fallback
+        requestAnimationFrame(() => {
+          el.classList.remove('aosv2-hidden');
+          el.classList.add(meta.customClass);
+          el.style.transform = 'none';
+          el.style.opacity = 1;
+          el.style.filter = 'none';
+        });
+      }
+
+      // SVG draw
+      if (meta.drawPath && el.tagName.toLowerCase() === 'svg') {
+        const paths = el.querySelectorAll('path, line, polyline, polygon, circle, rect');
+        paths.forEach(p => { try { p.style.strokeDashoffset = 0; } catch (e) {} });
+      }
+
+      // count-up
+      if (meta.count && el.__aosv2_count && !el.__aosv2_count.started) {
+        this._runCountUp(el, el.__aosv2_count);
+      }
+
+      meta.revealed = true;
+      this.elements.set(el, meta);
+      if (meta.once && this.observer) this.observer.unobserve(meta.anchor);
+    }
+
+    _trackAnim(anim, el, meta) {
+      this.animations.add(anim);
+      const cleanup = () => { try { anim.cancel && anim.cancel(); } catch (e) {} this.animations.delete(anim); };
+      anim.onfinish = () => cleanup();
+      anim.oncancel = () => cleanup();
+    }
+
+    _springReveal(el, meta) {
+      // tiny spring on scale -> settle to 1
+      const stiffness = meta.spring.stiffness || 180;
+      const damping = meta.spring.damping || 18;
+      let x = 0, v = 0, target = 1, mass = 1;
+      el.style.transformOrigin = 'center center';
+      el.style.transform = (meta.preset && meta.preset.transform) ? meta.preset.transform : 'scale(.96)';
+      const step = () => {
+        const f = -stiffness * (x - target) - damping * v;
+        const a = f / mass;
+        v += a * 0.016;
+        x += v * 0.016;
+        el.style.transform = `scale(${x})`;
+        if (Math.abs(v) > 0.001 || Math.abs(x - target) > 0.001) {
+          raf(step);
+        } else {
+          el.style.transform = 'none';
+        }
+      };
+      // seed
+      x = 0.96; v = 0;
+      setTimeout(() => raf(step), meta.delay || 0);
+    }
+
+    _resetReveal(el, meta) {
+      if (!meta.mirror) return;
+      requestAnimationFrame(() => {
+        el.classList.add('aosv2-hidden');
+        el.classList.remove(meta.customClass);
+        if (meta.preset && meta.preset.transform) el.style.transform = meta.preset.transform;
+        if (meta.preset && meta.preset.opacity !== undefined) el.style.opacity = meta.preset.opacity;
+        meta.revealed = false;
+        this.elements.set(el, meta);
+      });
+    }
+
+    _handleIntersect(entries) {
+      entries.forEach(entry => {
+        // each observed anchor may correspond to multiple metas
+        this.elements.forEach((meta, el) => {
+          if (meta.anchor !== entry.target) return;
+          const inView = entry.isIntersecting && entry.intersectionRatio > 0;
+          if (inView) {
+            if (meta.scrollScrub && meta.motionPath) {
+              // allow scrub to control; still reveal
+              this._applyPathProgress(el, meta);
             }
+            this._triggerReveal(el, meta);
           } else {
-            // animate out if mirror true
-            if (this._opts.mirror && !meta.once) {
-              inst.applyExit();
-            }
+            this._resetReveal(el, meta);
           }
         });
-      };
-
-      this._observer = new IntersectionObserver(observerCb, { root, rootMargin, threshold });
-
-      // Find all elements with data-aos
-      const elements = Array.from(document.querySelectorAll('[data-aos]'));
-      elements.forEach(el => {
-        // skip if reduced motion and configured
-        const inst = processElement(el, this._opts, this._observer);
-        this._instances.set(el, inst);
-
-        // wait a tick then observe (so layout settles)
-        try { this._observer.observe(el); } catch (e) { }
-        // for SVG draw and typewriter we prepared earlier
       });
+    }
 
-      // Parallax handling if any elements declare it
-      this._setupParallax();
+    _observeBatch(nodes) {
+      nodes.forEach(n => { if (!this.elements.has(n)) this.queue.push(n); });
+      if (this.batchTimer) return;
+      this.batchTimer = setTimeout(() => this._flushQueue(), this.opts.batchInterval);
+    }
 
-      // Optional: throttle resize to refresh observers if offsets change
-      window.addEventListener('resize', throttle(() => this.refresh(), 200));
-      return this;
-    },
+    _flushQueue() {
+      const nodes = this.queue.splice(0);
+      if (!nodes.length) { clearTimeout(this.batchTimer); this.batchTimer = null; return; }
+      if (!this.observer) {
+        const options = { root: null, rootMargin: '0px', threshold: 0 };
+        this.observer = new IntersectionObserver(this._handleIntersect, options);
+      }
+      nodes.forEach(el => {
+        const meta = this._buildMeta(el);
+        this.elements.set(el, meta);
+        this._prepareElement(el, meta);
+        try { this.observer.observe(meta.anchor); } catch (e) { this.observer.observe(el); }
+      });
+      clearTimeout(this.batchTimer); this.batchTimer = null;
+      this.log(`observing ${nodes.length} nodes; total tracked ${this.elements.size}`);
+    }
+
+    _mutationHandler(muts) {
+      muts.forEach(m => {
+        if (m.type === 'childList') {
+          m.addedNodes.forEach(node => {
+            if (!(node instanceof Element)) return;
+            if (node.hasAttribute && node.hasAttribute('data-aos')) this._observeBatch([node]);
+            const found = node.querySelectorAll && node.querySelectorAll('[data-aos]');
+            if (found && found.length) this._observeBatch(Array.from(found));
+          });
+        }
+      });
+    }
+
+    init(opts={}) {
+      this.opts = Object.assign({}, this.opts, opts);
+      if (this.opts.disableOnMobile && isMobileUA()) { this.log('disabled on mobile'); return; }
+      if (isReducedMotion()) { this.log('reduced motion: disabled'); return; }
+
+      const nodes = this._getNodes();
+      if (nodes.length) this._observeBatch(nodes);
+
+      if (!this.mutationObserver) {
+        this.mutationObserver = new MutationObserver(this._mutationHandler);
+        this.mutationObserver.observe(document.documentElement || document.body, { childList: true, subtree: true });
+      }
+
+      if (this.opts.editorEnabled) this.enableEditor();
+      this.log('AOSProV2 initialized');
+    }
 
     refresh() {
-      // re-process nodes (useful when DOM changes)
-      // disconnect old
-      if (this._observer) this._observer.disconnect();
-      this._instances = new Map();
-      return this.init(this._opts);
-    },
+      const nodes = this._getNodes();
+      const newNodes = nodes.filter(n => !this.elements.has(n));
+      if (newNodes.length) this._observeBatch(newNodes);
+      this.log('refresh: tracked', this.elements.size);
+    }
 
     destroy() {
-      if (this._observer) this._observer.disconnect();
-      this._instances.forEach((v,k) => {
-        // clear transitions
-        clearTransition(k);
+      try { this.observer && this.observer.disconnect(); } catch (e) {}
+      try { this.mutationObserver && this.mutationObserver.disconnect(); } catch (e) {}
+      this.elements.forEach((meta, el) => {
+        el.classList.remove('aosv2-init','aosv2-hidden', meta.customClass);
+        el.style.transition = ''; el.style.transform=''; el.style.opacity=''; el.style.filter='';
       });
-      this._instances.clear();
-    },
-
-    _setupParallax() {
-      // find elements that want parallax
-      const parallaxEls = Array.from(document.querySelectorAll('[data-aos-parallax-speed]')).map(el => ({
-        el,
-        speed: parseFloat(el.getAttribute('data-aos-parallax-speed')) || 0
-      })).filter(x => Math.abs(x.speed) > 0);
-
-      if (!parallaxEls.length) return;
-
-      // attach scroll listener
-      const onScroll = throttle(() => {
-        const vh = window.innerHeight;
-        parallaxEls.forEach(({el, speed}) => {
-          const rect = el.getBoundingClientRect();
-          // center offset ratio: -1..1
-          const centerOffset = ((rect.top + rect.height/2) - (vh/2)) / (vh/2);
-          const translateY = Math.round(centerOffset * speed * 100); // px-ish
-          el.style.transform = `translateY(${translateY}px)`;
-        });
-      }, 16);
-
-      window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll(); // initial
+      this.elements.clear();
+      this.queue = [];
+      this.log('destroyed');
     }
-  };
 
-  // Utility: simple throttle
-  function throttle(fn, wait) {
-    let last = 0, timer = null;
-    return function () {
-      const now = Date.now();
-      const args = arguments;
-      if (now - last >= wait) {
-        last = now;
-        fn.apply(this, args);
-      } else {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          last = Date.now();
-          fn.apply(this, args);
-        }, wait - (now - last));
-      }
-    };
-  }
+    registerPreset(name, preset) { this.opts.presets[name] = preset; this.log('preset registered', name); }
+    registerKeyframes(name, frames) { this.opts.keyframes[name] = frames; this.log('keyframes registered', name); }
+
+    animate(el, opts={}) {
+      if (!(el instanceof Element)) return;
+      const meta = Object.assign({}, this._buildMeta(el), opts);
+      this._prepareElement(el, meta);
+      setTimeout(() => this._triggerReveal(el, meta), 20);
+    }
+
+    timeline(name, opts={}) {
+      const items = opts.items || [];
+      const tl = {
+        name,
+        items,
+        run: (loop=false) => {
+          let t = 0;
+          items.forEach(i => {
+            setTimeout(() => this.animate(i.el, i), t + (i.delay||0));
+            t += (i.duration || this.opts.duration) + (i.delay||0);
+          });
+          if (loop) setTimeout(()=>tl.run(true), t+100);
+        },
+        seek: (ms)=>{ /* implement seek if needed later */ }
+      };
+      this.timelines.set(name, tl);
+      return tl;
+    }
+
+    enableEditor() {
+      if (this.editorOpen) return;
+      const ui = document.createElement('div');
+      ui.className = 'aosv2-devui';
+      ui.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div class="aosv2-badge">AOSProV2</div>
+        <div class="aosv2-badge">tracked: <span id="aosv2-count">${this.elements.size}</span></div>
+        <button id="aosv2-refresh" style="padding:6px;border-radius:6px;">Refresh</button>
+        <button id="aosv2-sample" style="padding:6px;border-radius:6px;">Preview Sample</button>
+      </div>`;
+      document.body.appendChild(ui);
+      document.getElementById('aosv2-refresh').addEventListener('click', () => this.refresh());
+      document.getElementById('aosv2-sample').addEventListener('click', () => {
+        // run a small preview of first 4 elements
+        let i=0;
+        this.elements.forEach((meta, el) => {
+          if (i++>3) return;
+          this._triggerReveal(el, meta);
+        });
+      });
+      this.editorOpen = true;
+      this.devUI = ui;
+      this._devInterval = setInterval(()=>{ const c=document.getElementById('aosv2-count'); if(c) c.textContent=this.elements.size; }, 400);
+    }
+
+    profile() {
+      const avg = this.profiler.frames.length ? (this.profiler.frames.reduce((a,b)=>a+b,0)/this.profiler.frames.length) : 0;
+      return { avgFrame: avg, fps: (avg?Math.round(1000/avg):60), samples: this.profiler.frames.length };
+    }
+
+    use(plugin) {
+      try {
+        if (typeof plugin === 'function') plugin(this);
+        else if (plugin && plugin.install) plugin.install(this);
+      } catch (e) { console.error('plugin error', e); }
+    }
+
+  } // class
 
   // Expose
-  global.AOS = AOS;
+  global.AOSProV2 = new AOSProV2Engine();
 
-  // Auto-init if attribute present on DOMContentLoaded: <body data-aos-auto-init="true">
-  document.addEventListener('DOMContentLoaded', () => {
-    try {
-      const auto = document.body && document.body.getAttribute && document.body.getAttribute('data-aos-auto-init');
-      if (auto === 'true') {
-        AOS.init();
-      }
-    } catch (e) {}
-  });
+  // Auto-init
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ()=>{ try { global.AOSProV2.init(); } catch(e){ console.error(e); } });
+  } else {
+    try { global.AOSProV2.init(); } catch(e){ console.error(e); }
+  }
 
 })(window);
