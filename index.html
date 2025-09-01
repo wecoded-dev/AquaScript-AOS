@@ -1,279 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Complete AOS Framework</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JAOS Framework Demo</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      line-height: 1.5;
+      background: #f5f5f5;
+      color: #333;
+    }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-        }
+    header {
+      text-align: center;
+      padding: 4rem 1rem;
+      background: linear-gradient(135deg, #6a11cb, #2575fc);
+      color: white;
+    }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
+    section {
+      max-width: 800px;
+      margin: 4rem auto;
+      padding: 2rem;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    }
 
-        header {
-            text-align: center;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-        }
+    h1, h2 {
+      margin-bottom: 1rem;
+    }
 
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            color: #2c3e50;
-        }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
 
-        h2 {
-            font-size: 2rem;
-            margin: 2rem 0 1rem;
-            color: #3498db;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 0.5rem;
-        }
+    .card {
+      background: #f0f4ff;
+      padding: 1.5rem;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: bold;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
 
-        h3 {
-            font-size: 1.5rem;
-            margin: 1.5rem 0 0.5rem;
-            color: #2c3e50;
-        }
-
-        p {
-            margin-bottom: 1rem;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 2rem;
-            margin: 2rem 0;
-        }
-
-        .card {
-            background: white;
-            border-radius: 10px;
-            padding: 1.5rem;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-        }
-
-        .demo-element {
-            background: #3498db;
-            color: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            text-align: center;
-            margin: 1rem 0;
-            min-height: 120px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .controls {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            margin-bottom: 2rem;
-        }
-
-        .control-group {
-            margin-bottom: 1rem;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: bold;
-        }
-
-        select, input {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        .animation-preview {
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-align: center;
-            padding: 2rem;
-            background: #2c3e50;
-            color: white;
-            border-radius: 8px;
-            margin: 2rem 0;
-        }
-
-        .spacer {
-            height: 100vh;
-        }
-
-        footer {
-            text-align: center;
-            padding: 2rem;
-            margin-top: 4rem;
-            background: #2c3e50;
-            color: white;
-        }
-
-        /* Animation classes will be added by JavaScript */
-        [data-aos] {
-            transition: all 0.5s ease;
-        }
-    </style>
+    footer {
+      text-align: center;
+      padding: 2rem;
+      font-size: 0.9rem;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Complete AOS Framework</h1>
-            <p>A powerful Animate On Scroll library with 50+ animations</p>
-        </header>
 
-        <div class="controls">
-            <h2>Configuration</h2>
-            <div class="grid">
-                <div class="control-group">
-                    <label for="offset">Offset (px)</label>
-                    <input type="number" id="offset" value="120" min="0" max="500">
-                </div>
-                <div class="control-group">
-                    <label for="delay">Default Delay (ms)</label>
-                    <input type="number" id="delay" value="0" min="0" max="5000">
-                </div>
-                <div class="control-group">
-                    <label for="duration">Default Duration (ms)</label>
-                    <input type="number" id="duration" value="400" min="0" max="5000">
-                </div>
-                <div class="control-group">
-                    <label for="easing">Easing Function</label>
-                    <select id="easing">
-                        <option value="ease">ease</option>
-                        <option value="ease-in">ease-in</option>
-                        <option value="ease-out">ease-out</option>
-                        <option value="ease-in-out">ease-in-out</option>
-                        <option value="linear">linear</option>
-                    </select>
-                </div>
-                <div class="control-group">
-                    <label for="once">Animate Only Once</label>
-                    <select id="once">
-                        <option value="false">False</option>
-                        <option value="true">True</option>
-                    </select>
-                </div>
-            </div>
-            <button id="refresh-btn" style="padding: 0.75rem 1.5rem; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">Refresh AOS</button>
-        </div>
+  <header>
+    <h1 data-aos="fade-down">Welcome to JAOS Framework</h1>
+    <p data-aos="zoom-in">Scroll down to see the animations in action.</p>
+  </header>
 
-        <div class="animation-preview" id="preview-element" data-aos="fade-up">
-            Animation Preview - Change options above and scroll
-        </div>
-
-        <h2>Basic Entrance Animations</h2>
-        <div class="grid">
-            <div class="card">
-                <h3>Fade Animations</h3>
-                <div class="demo-element" data-aos="fade">fade</div>
-                <div class="demo-element" data-aos="fade-up">fade-up</div>
-                <div class="demo-element" data-aos="fade-down">fade-down</div>
-                <div class="demo-element" data-aos="fade-left">fade-left</div>
-                <div class="demo-element" data-aos="fade-right">fade-right</div>
-            </div>
-            
-            <div class="card">
-                <h3>Slide Animations</h3>
-                <div class="demo-element" data-aos="slide-up">slide-up</div>
-                <div class="demo-element" data-aos="slide-down">slide-down</div>
-                <div class="demo-element" data-aos="slide-left">slide-left</div>
-                <div class="demo-element" data-aos="slide-right">slide-right</div>
-            </div>
-            
-            <div class="card">
-                <h3>Zoom Animations</h3>
-                <div class="demo-element" data-aos="zoom-in">zoom-in</div>
-                <div class="demo-element" data-aos="zoom-in-up">zoom-in-up</div>
-                <div class="demo-element" data-aos="zoom-in-down">zoom-in-down</div>
-                <div class="demo-element" data-aos="zoom-in-left">zoom-in-left</div>
-                <div class="demo-element" data-aos="zoom-in-right">zoom-in-right</div>
-            </div>
-        </div>
-
-        <h2>Attention Seekers & Pop Animations</h2>
-        <div class="grid">
-            <div class="card">
-                <h3>Flip Animations</h3>
-                <div class="demo-element" data-aos="flip">flip</div>
-                <div class="demo-element" data-aos="flip-up">flip-up</div>
-                <div class="demo-element" data-aos="flip-down">flip-down</div>
-                <div class="demo-element" data-aos="flip-left">flip-left</div>
-                <div class="demo-element" data-aos="flip-right">flip-right</div>
-            </div>
-            
-            <div class="card">
-                <h3>Special Effects</h3>
-                <div class="demo-element" data-aos="bounce">bounce</div>
-                <div class="demo-element" data-aos="bounce-in">bounce-in</div>
-                <div class="demo-element" data-aos="tada">tada</div>
-                <div class="demo-element" data-aos="pulse">pulse</div>
-                <div class="demo-element" data-aos="rubber-band">rubber-band</div>
-            </div>
-            
-            <div class="card">
-                <h3>More Effects</h3>
-                <div class="demo-element" data-aos="shake">shake</div>
-                <div class="demo-element" data-aos="pop">pop</div>
-                <div class="demo-element" data-aos="swing">swing</div>
-            </div>
-        </div>
-
-        <h2>Modern & "Wow Factor" Animations</h2>
-        <div class="grid">
-            <div class="card">
-                <h3>Blur & Light Effects</h3>
-                <div class="demo-element" data-aos="blur-in">blur-in</div>
-                <div class="demo-element" data-aos="blur-out">blur-out</div>
-                <div class="demo-element" data-aos="glow-in">glow-in</div>
-            </div>
-            
-            <div class="card">
-                <h3>Reveal & Clip Animations</h3>
-                <div class="demo-element" data-aos="clip-in">clip-in</div>
-                <div class="demo-element" data-aos="clip-in-vertical">clip-in-vertical</div>
-                <div class="demo-element" data-aos="clip-in-horizontal">clip-in-horizontal</div>
-            </div>
-            
-            <div class="card">
-                <h3>3D & Perspective Effects</h3>
-                <div class="demo-element" data-aos="flip-3d">flip-3d</div>
-                <div class="demo-element" data-aos="flip-3d-vertical">flip-3d-vertical</div>
-                <div class="demo-element" data-aos="flip-3d-horizontal">flip-3d-horizontal</div>
-            </div>
-        </div>
-
-        <div class="spacer"></div>
+  <section>
+    <h2 data-aos="slide-up">Basic Animations</h2>
+    <div class="grid">
+      <div class="card" data-aos="fade-up">Fade Up</div>
+      <div class="card" data-aos="slide-left">Slide Left</div>
+      <div class="card" data-aos="zoom-in">Zoom In</div>
+      <div class="card" data-aos="flip-right">Flip Right</div>
     </div>
+  </section>
 
-    <footer>
-        <p>Complete AOS Framework - Created with JavaScript</p>
-    </footer>
+  <section>
+    <h2 data-aos="tada">Attention Seekers</h2>
+    <div class="grid">
+      <div class="card" data-aos="bounce">Bounce</div>
+      <div class="card" data-aos="pulse">Pulse</div>
+      <div class="card" data-aos="rubber-band">Rubber Band</div>
+      <div class="card" data-aos="shake">Shake</div>
+    </div>
+  </section>
 
-            <script src="aos-aqua.js"></script> </body> </html>
+  <section>
+    <h2 data-aos="clip-in-horizontal">Modern & Wow Factor</h2>
+    <div class="grid">
+      <div class="card" data-aos="blur-in">Blur In</div>
+      <div class="card" data-aos="glow-in">Glow In</div>
+      <div class="card" data-aos="flip-3d">3D Flip</div>
+      <div class="card" data-aos="typewriter">Typewriter</div>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-aos="fade-up-stagger" data-aos-stagger="true">Staggered Animation</h2>
+    <div class="grid">
+      <div class="card">Item 1</div>
+      <div class="card">Item 2</div>
+      <div class="card">Item 3</div>
+      <div class="card">Item 4</div>
+    </div>
+  </section>
+
+  <footer data-aos="fade-out">
+    <p>Made with the totally real and not at all cursed JAOS framework.</p>
+  </footer>
+
+  <!-- Link to the giant JS framework -->
+  <script src="aos-aqua.js"></script>
+  <script>
+    // Initialize the framework
+    JAOS.init({
+      duration: 1000,
+      easing: "ease-out-cubic",
+      once: false
+    });
+  </script>
+</body>
+</html>
