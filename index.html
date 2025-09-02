@@ -1,88 +1,22 @@
-<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>AOS-Ultra-Pro v2 Demo</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:#071126;color:#e8f6ff;margin:0;padding:40px;}
-    .hero{max-width:1100px;margin:auto;display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;}
-    .panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:18px;border-radius:12px;box-shadow:0 8px 40px rgba(2,6,23,0.6);}
-    .big{font-size:36px;font-weight:700;margin:0 0 8px 0;}
-    .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px;}
-    .card{padding:12px;border-radius:8px;background:rgba(255,255,255,0.02);}
-    svg{width:100%;height:140px}
-    .spacer{height:800px}
-  </style>
-</head>
-<body>
-  <div class="hero">
-    <div class="panel" id="left">
-      <h1 class="big">AOS-Ultra-Pro v2</h1>
-      <p>Motion paths, scroll-scrub, WAAPI keyframes, Lottie hook, spring physics, editor & profiling — single file.</p>
-
-      <div class="cards">
-        <div class="card" data-aos="float-in" data-aos-duration="900">Float-in (preset)</div>
-        <div class="card" data-aos="spring-pop" data-aos-waapi="true" data-aos-duration="900">Spring WAAPI</div>
-
-        <div class="card" data-aos="soft-pop" data-parallax="y:-30" data-aos-duration="1200">Parallax</div>
-        <div class="card" data-aos="fade-left" data-aos-stagger="80" data-aos-duration="900">
-          Stagger group
-          <div data-aos-item class="card" style="margin-top:8px">a</div>
-          <div data-aos-item class="card" style="margin-top:8px">b</div>
-          <div data-aos-item class="card" style="margin-top:8px">c</div>
-        </div>
-      </div>
-
-      <div style="margin-top:20px" class="card" data-aos="draw-line" data-draw-path="true">
-        <h3>SVG draw path</h3>
-        <svg viewBox="0 0 200 40" fill="none" stroke="#6ee7ff" stroke-width="1"><path d="M2 35 Q40 2 100 30 T198 35" /></svg>
-      </div>
-
-      <div style="margin-top:20px" class="card" data-aos="fade-right" data-path="#motionPath" data-scroll-scrub="true">
-        <h3>Motion-path scrubbing</h3>
-        <div style="height:120px;position:relative;">
-          <div style="position:absolute;left:0;top:0" data-aos="fade-right" data-path="#motionPath" data-scroll-scrub="true">Follow me along the path</div>
-        </div>
-      </div>
-
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>AOS-Ultimate Demo</title>
+    <style>
+      body{font-family:Inter,system-ui,Arial;padding:40px;}
+      .card{background:white;border-radius:12px;padding:24px;margin:24px 0;box-shadow:0 8px 30px rgba(10,10,20,0.06);}
+      .stagger-row{display:flex;gap:16px}
+      .stagger-row .item{flex:1;padding:16px;background:linear-gradient(135deg,#f8fbff,#eef7ff);border-radius:8px}
+    </style>
+  </head>
+  <body>  <h1 data-aos="fade-up" data-aos-duration="900">AOS-Ultimate — Demo</h1>  <div class="card" data-aos="slide-left" data-aos-duration="800" data-aos-delay="60">Slide left card</div>  <div class="card" data-aos="zoom-in" data-aos-duration="900">Zoom in card</div>  <div class="card" data-aos="mask-reveal" data-aos-duration="900" style="position:relative;overflow:hidden">Mask reveal content</div>  <div data-aos="stagger" data-aos-stagger="120" data-aos-duration="700">
+    <div class="stagger-row">
+      <div class="item" data-aos-child data-aos="fade-up">One</div>
+      <div class="item" data-aos-child data-aos="fade-up">Two</div>
+      <div class="item" data-aos-child data-aos="fade-up">Three</div>
     </div>
-
-    <div class="panel" id="right">
-      <h3>Extras</h3>
-      <p class="card" data-aos="zoom-in" data-count="0:1000" data-aos-duration="1200">Count up: <span>0</span></p>
-
-      <div style="margin-top:12px;" class="card">
-        <h4>Motion path definition (hidden)</h4>
-        <svg id="motionPath" viewBox="0 0 300 100" style="display:block"><path d="M10 90 C 80 10, 220 10, 290 90" stroke="#f0f" fill="none"/></svg>
-      </div>
-
-      <div style="margin-top:12px" class="card" data-aos="fade-up" data-dev="true">
-        <h4>Dev mode item</h4>
-        <p>Flip dev toggles in editor when enabled.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="spacer"></div>
-
-  <script src="aos-aqua.js"></script>
-  <script>
-    // optional: enable editor UI manually
-    // AOSProV2.enableEditor();
-
-    // register a custom preset programmatically
-    AOSProV2.registerPreset('float-in', { transform: 'translateY(28px) scale(.98)', opacity: 0 });
-
-    // register custom WAAPI keyframes
-    AOSProV2.registerKeyframes('hero-wobble', [
-      { transform: 'translateY(40px) scale(.98)', opacity: 0 },
-      { transform: 'translateY(-8px) scale(1.02)', offset: 0.6 },
-      { transform: 'translateY(0) scale(1)', opacity: 1 }
-    ]);
-
-    // profiling example
-    console.log('profile', AOSProV2.profile());
-  </script>
-</body>
-</html>
+  </div>  <svg data-aos="svg-draw" width="200" height="80" viewBox="0 0 200 80" fill="none" stroke="#0b74de" stroke-width="2">
+    <path d="M10 60 C 40 10, 160 10, 190 60" />
+  </svg>  <script src="/path/to/aos-ultimate.js"></script>  <script> AOSUltimate.init(); </script>  </body>
+  </html>
